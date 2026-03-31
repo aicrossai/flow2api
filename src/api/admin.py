@@ -293,12 +293,23 @@ async def _solve_recaptcha_with_api_service(
     create_url = f"{base_url.rstrip('/')}/createTask"
     get_url = f"{base_url.rstrip('/')}/getTaskResult"
 
+    # 获取代理配置
+    proxies = None
+    try:
+        if proxy_manager:
+            proxy_cfg = await proxy_manager.get_proxy_config()
+            if proxy_cfg and proxy_cfg.enabled and proxy_cfg.proxy_url:
+                proxies = {"http": proxy_cfg.proxy_url, "https": proxy_cfg.proxy_url}
+    except Exception:
+        pass
+
     async with AsyncSession() as session:
         create_resp = await session.post(
             create_url,
             json={"clientKey": client_key, "task": task},
             impersonate="chrome120",
-            timeout=30
+            timeout=30,
+            proxies=proxies
         )
         create_json = create_resp.json()
         task_id = create_json.get("taskId")
@@ -312,7 +323,8 @@ async def _solve_recaptcha_with_api_service(
                 get_url,
                 json={"clientKey": client_key, "taskId": task_id},
                 impersonate="chrome120",
-                timeout=30
+                timeout=30,
+                proxies=proxies
             )
             poll_json = poll_resp.json()
             if poll_json.get("status") == "ready":

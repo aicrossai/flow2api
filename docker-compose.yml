@@ -4,12 +4,14 @@ services:
   flow2api:
     image: ghcr.io/thesmallhancat/flow2api:latest
     container_name: flow2api
-    ports:
-      - "38000:8000"
+    network_mode: host
     volumes:
       - ./data:/app/data
       - ./tmp:/app/tmp
       - ./config/setting.toml:/app/config/setting.toml
+      - ./src/services/proxy_manager.py:/app/src/services/proxy_manager.py
+      - ./src/services/flow_client.py:/app/src/services/flow_client.py
+      - ./src/api/admin.py:/app/src/api/admin.py
     environment:
       - PYTHONUNBUFFERED=1
     restart: unless-stopped

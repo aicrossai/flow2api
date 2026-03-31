@@ -53,6 +53,7 @@ class NormalizedGenerationRequest:
     prompt: str
     images: List[bytes]
     messages: Optional[List[ChatMessage]] = None
+    video_media_id: Optional[str] = None
 
 
 def set_generation_handler(handler: GenerationHandler):
@@ -227,11 +228,18 @@ def _extract_text_from_gemini_content(content: Optional[GeminiContent]) -> str:
 
 async def _extract_prompt_and_images_from_openai_messages(
     messages: List[ChatMessage],
-) -> tuple[str, List[bytes]]:
+) -> tuple[str, List[bytes], Optional[str]]:
+    """Extract prompt, images, and optional video_media_id from messages.
+
+    Returns:
+        (prompt, images, video_media_id)
+        video_media_id is set when an image_url starts with "extend://"
+    """
     last_message = messages[-1]
     content = last_message.content
     prompt_parts: List[str] = []
     images: List[bytes] = []
+    video_media_id: Optional[str] = None
 
     if isinstance(content, str):
         prompt_parts.append(content)
@@ -244,10 +252,14 @@ async def _extract_prompt_and_images_from_openai_messages(
                     prompt_parts.append(text)
             elif item_type == "image_url":
                 image_url = item.get("image_url", {}).get("url", "")
-                images.append(await _load_image_bytes_from_uri(image_url))
+                # extend://MEDIA_ID 用于视频续写
+                if image_url.startswith("extend://"):
+                    video_media_id = image_url[len("extend://"):]
+                else:
+                    images.append(await _load_image_bytes_from_uri(image_url))
 
     prompt = "\n".join(part for part in prompt_parts if part).strip()
-    return prompt, images
+    return prompt, images, video_media_id
 
 
 async def _append_openai_reference_images(
@@ -339,7 +351,7 @@ async def _normalize_openai_request(
     request: ChatCompletionRequest,
 ) -> NormalizedGenerationRequest:
     if request.messages:
-        prompt, images = await _extract_prompt_and_images_from_openai_messages(
+        prompt, images, video_media_id = await _extract_prompt_and_images_from_openai_messages(
             request.messages
         )
         if request.image and not images:
@@ -351,6 +363,7 @@ async def _normalize_openai_request(
             prompt=prompt,
             images=images,
             messages=request.messages,
+            video_media_id=video_media_id,
         )
 
     if request.contents:
@@ -385,6 +398,7 @@ async def _collect_non_stream_result(
     model: str,
     prompt: str,
     images: List[bytes],
+    video_media_id: Optional[str] = None,
 ) -> str:
     handler = _ensure_generation_handler()
     result = None
@@ -393,6 +407,7 @@ async def _collect_non_stream_result(
         prompt=prompt,
         images=images if images else None,
         stream=False,
+        video_media_id=video_media_id,
     ):
         result = chunk
 
@@ -592,6 +607,7 @@ async def _iterate_openai_stream(
         prompt=normalized.prompt,
         images=normalized.images if normalized.images else None,
         stream=True,
+        video_media_id=normalized.video_media_id,
     ):
         if chunk.startswith("data: "):
             yield chunk
@@ -613,6 +629,7 @@ async def _iterate_gemini_stream(
         prompt=normalized.prompt,
         images=normalized.images if normalized.images else None,
         stream=True,
+        video_media_id=normalized.video_media_id,
     ):
         if chunk.startswith("data: "):
             payload_text = chunk[6:].strip()
@@ -737,6 +754,7 @@ async def create_chat_completion(
                 normalized.model,
                 normalized.prompt,
                 normalized.images,
+                video_media_id=normalized.video_media_id,
             )
         )
         return _build_openai_json_response(payload)

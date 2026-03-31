@@ -164,6 +164,11 @@ VIDEO_BASE_MODELS = {
         "landscape": "veo_3_1_r2v_fast_ultra_relaxed",
         "portrait": "veo_3_1_r2v_fast_portrait_ultra_relaxed",
     },
+    # Extend models (视频续写)
+    "veo_3_1_extend": {
+        "landscape": "veo_3_1_extend",
+        "portrait": "veo_3_1_extend_portrait",
+    },
 }
 
 
